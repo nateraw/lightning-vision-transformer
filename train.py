@@ -83,8 +83,8 @@ class LM(pl.LightningModule):
         return loss
 
     def validation_epoch_end(self, losses):
-        self.log("valid_loss", torch.stack(losses).mean())
-        self.log("valid_acc", self.val_accuracy.compute())
+        self.log("valid_loss", torch.stack(losses).mean(), prog_bar=True)
+        self.log("valid_acc", self.val_accuracy.compute(), prog_bar=True)
 
 
 def parse_args(args=None):
@@ -96,17 +96,12 @@ def parse_args(args=None):
     parser.add_argument("--dim", type=int, default=256)
     parser.add_argument("--layers", type=int, default=12)
     parser.add_argument("--heads", type=int, default=8)
-    parser.add_argument("--dropout_p", type=float, default=0.0)
-    parser.add_argument("--epochs", type=int, default=200)
-    parser.add_argument("--gpus", default=0)
+    parser.add_argument("--dropout_p", type=float, default=0.1)
+    parser = pl.Trainer.add_argparse_args(parser)
     return parser.parse_args(args)
 
 
-if __name__ == "__main__":
-    torch.autograd.set_detect_anomaly(True)
-    pl.seed_everything(42)
-    args = parse_args()
-
+def get_datamodule():
     train_transforms = transforms.Compose(
         [
             transforms.RandomCrop(32, padding=4),
@@ -125,15 +120,28 @@ if __name__ == "__main__":
     dm.train_transforms = train_transforms
     dm.test_transforms = test_transforms
     dm.val_transforms = test_transforms
+    return dm
 
+
+if __name__ == "__main__":
+    torch.autograd.set_detect_anomaly(True)
+    pl.seed_everything(42)
+    args = parse_args()
+    dm = get_datamodule()
+    
+    # Add some dm attributes to args Namespace
     args.image_size = dm.size(-1)  # 32 for CIFAR
     args.num_classes = dm.num_classes  # 10 for CIFAR
 
     # compute total number of steps
     batch_size = args.batch_size * args.gpus if args.gpus > 0 else args.batch_size
-    args.steps = dm.num_samples // batch_size * args.epochs
-
+    args.steps = dm.num_samples // batch_size * args.max_epochs
+    
+    # Init Lightning Module
     lm = LM(**vars(args))
-
-    trainer = pl.Trainer(max_epochs=args.epochs, gpus=args.gpus)
+    
+    # Set up Trainer
+    trainer = pl.Trainer.from_argparse_args(args)  # (max_epochs=args.maxepochs, gpus=args.gpus, precision=args.precision)
+    
+    # Train!
     trainer.fit(lm, dm)
