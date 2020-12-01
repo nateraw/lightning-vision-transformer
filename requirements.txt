@@ -1,0 +1,6 @@
+torch==1.6.0
+pytorch_lightning==1.0.4
+torchvision==0.7.0
+numpy==1.19.2
+einops==0.3.0
+pytorch-lightning-bolts==0.2.5
